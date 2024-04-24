@@ -1,13 +1,15 @@
 import argparse
 from modules import Unet, Trainer
 from torch.utils.data import DataLoader
-from dataset import Dataset
+from dataset import Dataset, MMFiDataset
 from torch.optim import Adam
 
 #Parse arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('name', help="Model name, call me something cool", type=str)
-parser.add_argument('path', help="Path to dataset", type=str)
+# parser.add_argument('--name', default='celebA', help="Model name, call me something cool", type=str)
+parser.add_argument('--name', default='train-on-MMFi', help="Model name, call me something cool", type=str)
+# parser.add_argument('--path', default='/data/szy4017/data/CelebA/img_align_celeba/', help="Path to dataset", type=str)
+parser.add_argument('--path', default='/data/szy4017/data/mmfi/E01/S01', help="Path to dataset", type=str)
 parser.add_argument('--timesteps', '-t', help="Number of timesteps in denoising pass. Default = 1000", type=int)
 parser.add_argument('--epochs', '-e', help="Number of epochs to train for. Default = 100", type=int)
 parser.add_argument('--batch_size', '-b', help="Training mini-batch size. Default = 64", type=int)
@@ -56,7 +58,8 @@ else:
     beta_schedule = 'linear'
 
 #load dataset
-ds = Dataset(path, img_size=image_size)
+# ds = Dataset(path, img_size=image_size)
+ds = MMFiDataset(path)
 dataloader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True)
 
 #create trainer

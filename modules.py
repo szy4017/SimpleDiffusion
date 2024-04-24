@@ -29,6 +29,36 @@ def show_tensor_image(image):
         image = image[0, :, :, :] 
     plt.imshow(reverse_transforms(image))
 
+def show_tensor_voxel(voxel):
+    reverse_transforms = transforms.Compose([
+        transforms.Lambda(lambda t: (t + 1) / 2),
+        transforms.Lambda(lambda t: t.permute(1, 2, 0)), # CHW to HWC
+        transforms.Lambda(lambda t: t * 5.),
+        transforms.Lambda(lambda t: t.numpy().astype(np.uint8)),
+    ])
+    if len(voxel.shape) == 4:
+        voxel = voxel[0, :, :, :]
+    Dx, Dy, Dz = voxel.shape
+    voxel_grid = np.zeros((Dx, Dy, Dz), dtype=bool)
+    voxel_grid[voxel > 0] = True
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.voxels(voxel_grid, edgecolor='k')
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title('3D Voxel')
+
+    ax.set_xlim(0, Dx)
+    ax.set_ylim(0, Dy)
+    ax.set_zlim(0, Dz)
+
+    ax.view_init(azim=135, elev=30)
+
+    plt.show()
+
 """
 ----------
 Networks
@@ -87,7 +117,8 @@ class Unet(nn.Module):
         """
         self.img_size = im_size
         super().__init__()
-        image_channels = 3
+        # feature_channels = 3  # for image data
+        feature_channels = 40 # for voxel data
         #Autoconfigure Unet using image size
         down_channels = (im_size, im_size * 2, im_size * 4, im_size * 8)#(64, 128, 256, 512, 1024)
         up_channels = (im_size * 8, im_size * 4, im_size * 2, im_size)#(1024, 512, 256, 128, 64)
@@ -104,7 +135,7 @@ class Unet(nn.Module):
             )
         
         #Initial projection
-        self.conv0 = nn.Conv2d(image_channels, down_channels[0], 3, padding=1)
+        self.conv0 = nn.Conv2d(feature_channels, down_channels[0], 3, padding=1)
 
         #Create U-Net blocks
         self.downs = nn.ModuleList([])
@@ -122,7 +153,7 @@ class Unet(nn.Module):
                 Block(up_channels[i], up_channels[i+1], time_emb_dim, up=True),
             )
 
-        self.output = nn.Conv2d(up_channels[-1], 3, out_dim)
+        self.output = nn.Conv2d(up_channels[-1], feature_channels, out_dim)
 
     def forward(self, x, timestep):
         #Embed time
@@ -290,6 +321,19 @@ class Trainer:
         plt.savefig(path, bbox_inches='tight')
         plt.close()
 
+    def generate_voxel_plot(self, path, num_images=10):
+        voxel = torch.randn(1, 40, 64, 64, device=self.device)
+        stepsize = int(self.T/num_images)
+
+        for i in range(0, self.T)[::-1]:
+            t = torch.full((1,), i, device=self.device, dtype=torch.long)
+            voxel = self.sample_reverse(voxel, t)
+            if i % stepsize == 0:
+                plt.subplot(1, num_images, int(i/stepsize+1))
+                show_tensor_voxel(voxel.detach().cpu())
+        plt.savefig(path, bbox_inches='tight')
+        plt.close()
+
     @torch.no_grad()
     def generate_image(self, path):
         """
@@ -348,9 +392,10 @@ class Trainer:
                 if step == 0:
                     print(f"Epoch {epoch} Loss: {loss.item()}")
                     #create images
-                    if self.create_images:
-                        self.generate_image_plot(f"plots/plot_epoch{epoch}.jpeg")
-                        self.generate_image(f"outputs/diff_epoch{epoch}.jpeg")
+                    # if self.create_images:
+                        # self.generate_image_plot(f"plots/plot_epoch{epoch}.jpeg")
+                        # self.generate_image(f"outputs/diff_epoch{epoch}.jpeg")
+                        # self.generate_voxel_plot(f"plots/plot_epoch{epoch}.jpeg")
                     #tensorboard
                     if self.tensorboard:
                         sw.add_scalar("Loss", loss, epoch)
