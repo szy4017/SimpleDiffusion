@@ -33,11 +33,14 @@ def show_tensor_voxel(voxel):
     reverse_transforms = transforms.Compose([
         transforms.Lambda(lambda t: (t + 1) / 2),
         transforms.Lambda(lambda t: t.permute(1, 2, 0)), # CHW to HWC
-        transforms.Lambda(lambda t: t * 5.),
+        transforms.Lambda(lambda t: t * 255.),
         transforms.Lambda(lambda t: t.numpy().astype(np.uint8)),
     ])
     if len(voxel.shape) == 4:
         voxel = voxel[0, :, :, :]
+    voxel = reverse_transforms(voxel)
+    voxel = voxel * 5. // 255.
+    print(np.count_nonzero(voxel == 0))
     Dx, Dy, Dz = voxel.shape
     voxel_grid = np.zeros((Dx, Dy, Dz), dtype=bool)
     voxel_grid[voxel > 0] = True
@@ -58,6 +61,32 @@ def show_tensor_voxel(voxel):
     ax.view_init(azim=135, elev=30)
 
     plt.show()
+
+def show_tensor_voxel_map(voxel_map, path):
+    reverse_transforms = transforms.Compose([
+        transforms.Lambda(lambda t: (t + 1) / 2),
+        transforms.Lambda(lambda t: t.permute(1, 2, 0)),  # CHW to HWC
+        # transforms.Lambda(lambda t: t * 780.),
+        transforms.Lambda(lambda t: t.numpy()),
+    ])
+    if len(voxel_map.shape) == 4:
+        voxel_map = voxel_map[0, :, :, :]
+    voxel_map = reverse_transforms(voxel_map)
+    fig, axs = plt.subplots(1, 8)
+    for i in range(voxel_map.shape[-1]):
+        voxel_im = voxel_map[:, :, i]
+        axs[i].imshow(voxel_im)
+
+    for ax in fig.get_axes():
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.axis('off')
+
+    plt.savefig(path, bbox_inches='tight')
+    plt.show()
+    plt.close()
+
+
 
 """
 ----------
@@ -80,8 +109,9 @@ class Block(nn.Module):
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
         self.bnorm1 = nn.GroupNorm(1, out_ch)
         self.bnorm2 = nn.GroupNorm(1, out_ch)
-        self.relu  = nn.ReLU()
-        
+        # self.relu  = nn.ReLU()
+        self.relu = nn.LeakyReLU(negative_slope=0.2)
+
     def forward(self, x, t, ):
         h = self.bnorm1(self.relu(self.conv1(x)))
         time_emb = self.relu(self.time_mlp(t))
@@ -118,10 +148,10 @@ class Unet(nn.Module):
         self.img_size = im_size
         super().__init__()
         # feature_channels = 3  # for image data
-        feature_channels = 40 # for voxel data
+        feature_channels = 8 # for voxel data
         #Autoconfigure Unet using image size
-        down_channels = (im_size, im_size * 2, im_size * 4, im_size * 8)#(64, 128, 256, 512, 1024)
-        up_channels = (im_size * 8, im_size * 4, im_size * 2, im_size)#(1024, 512, 256, 128, 64)
+        down_channels = (im_size, im_size * 2, im_size * 4, im_size * 8)  #(64, 128, 256, 512, 1024)
+        up_channels = (im_size * 8, im_size * 4, im_size * 2, im_size)    #(1024, 512, 256, 128, 64)
         #output dimensions
         out_dim = 1
         #time embedded dimension
@@ -179,7 +209,7 @@ Training
 ------------
 """
 class Trainer:
-    def __init__(self, img_size, timesteps=1000, start=0.0001, end=0.02, create_images=True, tensorboard=True, schedule='linear'):
+    def __init__(self, img_size, timesteps=1000, start=0.0001, end=0.02, lr=1e-4, create_images=True, tensorboard=True, schedule='linear'):
         """
         Class to train U-Net Diffusion model
         """
@@ -197,7 +227,7 @@ class Trainer:
         #Attach model to device
         self.model = Unet(self.img_size).to(self.device)
 
-        self.optimizer = Adam(self.model.parameters(), lr=1e-4)
+        self.optimizer = Adam(self.model.parameters(), lr=lr)
 
         #disable flags
         self.create_images = create_images
@@ -321,18 +351,54 @@ class Trainer:
         plt.savefig(path, bbox_inches='tight')
         plt.close()
 
-    def generate_voxel_plot(self, path, num_images=10):
-        voxel = torch.randn(1, 40, 64, 64, device=self.device)
+    def generate_voxel_plot(self, path, num_images=100):
+        # voxel = torch.randn(1, 40, 64, 64, device=self.device)
+        voxel = torch.randn(1, 24, 64, 24, device=self.device)
         stepsize = int(self.T/num_images)
 
         for i in range(0, self.T)[::-1]:
             t = torch.full((1,), i, device=self.device, dtype=torch.long)
             voxel = self.sample_reverse(voxel, t)
             if i % stepsize == 0:
-                plt.subplot(1, num_images, int(i/stepsize+1))
-                show_tensor_voxel(voxel.detach().cpu())
+                voxel_sample = voxel.detach().cpu()
+                reverse_transforms = transforms.Compose([
+                    transforms.Lambda(lambda t: (t + 1) / 2),
+                    transforms.Lambda(lambda t: t.permute(1, 2, 0)),  # CHW to HWC
+                    transforms.Lambda(lambda t: t * 255.),
+                    transforms.Lambda(lambda t: t.numpy().astype(np.uint8)),
+                ])
+                if len(voxel_sample.shape) == 4:
+                    voxel_sample = voxel_sample[0, :, :, :]
+                voxel_sample = reverse_transforms(voxel_sample)
+                voxel_sample = voxel_sample * 5. // 255.
+                print(np.count_nonzero(voxel_sample == 0))
+            # if i % stepsize == 0:
+            #     show_tensor_voxel(voxel.detach().cpu())
+        show_tensor_voxel(voxel.detach().cpu())
         plt.savefig(path, bbox_inches='tight')
         plt.close()
+
+    def generate_voxel_map_plot(self, path, num_images=100):
+        voxel_map = torch.randn(1, 8, 64, 24, device=self.device)
+        stepsize = int(self.T / num_images)
+
+        for i in range(0, self.T)[::-1]:
+            t = torch.full((1,), i, device=self.device, dtype=torch.long)
+            voxel_map = self.sample_reverse(voxel_map, t)
+            # if i % stepsize == 0:
+            #     voxel_map_sample = voxel_map.detach().cpu()
+            #     reverse_transforms = transforms.Compose([
+            #         transforms.Lambda(lambda t: (t + 1) / 2),
+            #         transforms.Lambda(lambda t: t.permute(1, 2, 0)),  # CHW to HWC
+            #         transforms.Lambda(lambda t: t.numpy())
+            #         # transforms.Lambda(lambda t: t * 780.),
+            #         # transforms.Lambda(lambda t: t.numpy().astype(np.uint16)),
+            #     ])
+            #     if len(voxel_map_sample.shape) == 4:
+            #         voxel_map_sample = voxel_map_sample[0, :, :, :]
+            #     voxel_map_sample = reverse_transforms(voxel_map_sample)
+            #     print(np.count_nonzero(voxel_map_sample == 0))
+        show_tensor_voxel_map(voxel_map.detach().cpu(), path)
 
     @torch.no_grad()
     def generate_image(self, path):
@@ -341,7 +407,7 @@ class Trainer:
 
         Saves image to path.
         """
-        img = torch.randn((1, 3, self.img_size, self.img_size), device=self.device)
+        img = torch.randn((1, 3, 24, 64), device=self.device)
 
         for i in range(0, self.T)[::-1]:
             t = torch.full((1,), i, device=self.device, dtype=torch.long)
@@ -392,7 +458,8 @@ class Trainer:
                 if step == 0:
                     print(f"Epoch {epoch} Loss: {loss.item()}")
                     #create images
-                    # if self.create_images:
+                    if self.create_images:
+                        self.generate_voxel_map_plot(f"plots/plot_epoch{epoch}.jpeg")
                         # self.generate_image_plot(f"plots/plot_epoch{epoch}.jpeg")
                         # self.generate_image(f"outputs/diff_epoch{epoch}.jpeg")
                         # self.generate_voxel_plot(f"plots/plot_epoch{epoch}.jpeg")

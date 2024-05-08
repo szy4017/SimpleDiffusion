@@ -7,7 +7,7 @@ import os
 
 #Parse arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('model', help="Path to model", type=str)
+parser.add_argument('--model', default='train-on-MMFi.pth', help="Path to model", type=str)
 parser.add_argument('--output', '-o', help="Output path to save images to default: ./", type=str)
 parser.add_argument('--num_images', '-i', help="Number of images to create, deafult: 1", type=int)
 parser.add_argument('--name', '-n', help="Name prefix for images", type=str)
@@ -29,7 +29,7 @@ else:
     name = "predict"
 
 #Create trainer, pass in temp parameters
-trainer = Trainer(img_size=64, timesteps=1000, start=0.0001, end=0.02)
+trainer = Trainer(img_size=24, timesteps=1000, start=0.0001, end=0.02)
 
 #load model
 trainer.load_model(model)
@@ -41,4 +41,6 @@ if output != './':
         os.makedirs(output)
 
 for i in range(num_images):
-    trainer.generate_image(output + name + "{}.jpeg".format(i))
+    # trainer.generate_image(output + name + "{}.jpeg".format(i))
+    # trainer.generate_voxel_plot(output + name + "{}.jpeg".format(i))
+    trainer.generate_voxel_map_plot(output + name + "{}.jpeg".format(i))

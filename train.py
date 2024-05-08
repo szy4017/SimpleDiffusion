@@ -1,19 +1,19 @@
 import argparse
 from modules import Unet, Trainer
 from torch.utils.data import DataLoader
-from dataset import Dataset, MMFiDataset
+from dataset import Dataset, MMFiDataset, MMFiMapDataset
 from torch.optim import Adam
 
 #Parse arguments
 parser = argparse.ArgumentParser()
 # parser.add_argument('--name', default='celebA', help="Model name, call me something cool", type=str)
-parser.add_argument('--name', default='train-on-MMFi', help="Model name, call me something cool", type=str)
+parser.add_argument('--name', default='train-on-MMFi-voxelmap-8', help="Model name, call me something cool", type=str)
 # parser.add_argument('--path', default='/data/szy4017/data/CelebA/img_align_celeba/', help="Path to dataset", type=str)
 parser.add_argument('--path', default='/data/szy4017/data/mmfi/E01/S01', help="Path to dataset", type=str)
-parser.add_argument('--timesteps', '-t', help="Number of timesteps in denoising pass. Default = 1000", type=int)
+parser.add_argument('--timesteps', '-t', default=1000, help="Number of timesteps in denoising pass. Default = 1000", type=int)
 parser.add_argument('--epochs', '-e', help="Number of epochs to train for. Default = 100", type=int)
 parser.add_argument('--batch_size', '-b', help="Training mini-batch size. Default = 64", type=int)
-parser.add_argument('--image_size', '-i', help="Dimensions to resize all images to. eg 255 -> 255x255 Default = 64", type=int)
+parser.add_argument('--image_size', '-i', default=24, help="Dimensions to resize all images to. eg 255 -> 255x255 Default = 64", type=int)
 parser.add_argument('--beta_schedule', '-s', help="Schdedule for calculating betas. Choose : linear, cosine, quadratic, sigmoid. Default: linear")
 parser.add_argument('--disable_images', help="Images will not be output during training", action='store_false')
 parser.add_argument('--disable_tensorboard', help="Tensorboard support will be disabled", action='store_false')
@@ -59,11 +59,12 @@ else:
 
 #load dataset
 # ds = Dataset(path, img_size=image_size)
-ds = MMFiDataset(path)
+# ds = MMFiDataset(path)
+ds = MMFiMapDataset(path)
 dataloader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True)
 
 #create trainer
-trainer = Trainer(img_size=image_size, timesteps=timesteps, start=0.0001, end=0.02, create_images= disable_images, tensorboard = disable_tensorboard, schedule=beta_schedule)
+trainer = Trainer(img_size=image_size, timesteps=timesteps, start=0.0001, end=0.02, lr=1e-3, create_images= disable_images, tensorboard = disable_tensorboard, schedule=beta_schedule)
 
 #train model
 trainer.fit(dataloader, epochs)
